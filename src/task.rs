@@ -49,7 +49,7 @@ impl Task {
         let areas = categories
             .clone()
             .map(|x| x.value.as_ref().unwrap().clone())
-            .filter(|val| val.starts_with("AREA__"))
+            .filter(|val| val.starts_with("AREA "))
             .collect();
         let projects = categories
             .clone()
@@ -59,19 +59,21 @@ impl Task {
         let money_needed = categories
             .clone()
             .map(|x| x.value.as_ref().unwrap().clone())
-            .filter(|val| val == "MONEY_NEEDED")
+            .filter(|val| val == "Money Needed")
             .collect::<Vec<String>>()
             .len()
             > 0;
         let time_of_day: Option<TimeOfDay> = categories
             .clone()
             .map(|x| x.value.as_ref().unwrap().clone())
-            .find(|val| val.starts_with("TIME-OF-DAY__"))
-            .map(|val| TimeOfDay::from_str(&val).expect("bad time of day"));
+            .find(|val| val.starts_with("TIMEOFDAY "))
+            .map(|val| {
+                TimeOfDay::from_str(&val).expect(&format!("{} is a bad time of day value", &val))
+            });
         let weather: Option<Weather> = categories
             .clone()
             .map(|x| x.value.as_ref().unwrap().clone())
-            .find(|val| val.starts_with("WEATHER__"))
+            .find(|val| val.starts_with("WEATHER "))
             .map(|val| Weather::from_str(&val).expect("bad time of day"));
         let parent_task = item.get_parent_uuid();
         Task {
@@ -113,6 +115,11 @@ impl CompletionStatus {
 
 #[derive(Debug, PartialEq, EnumString)]
 enum TimeOfDay {
+    #[strum(
+        serialize = "TIMEOFDAY  Morning",
+        serialize = "Morning",
+        serialize = "TIMEOFDAY Morning"
+    )]
     Morning,
     Midday,
     Afternoon,
@@ -121,6 +128,11 @@ enum TimeOfDay {
 }
 #[derive(Debug, PartialEq, EnumString)]
 enum Weather {
+    #[strum(
+        serialize = "WEATHER  Sunny",
+        serialize = "WEATHER Sunny",
+        serialize = "Sunny"
+    )]
     Sunny,
     Cloudy,
     Rainy,
@@ -141,6 +153,7 @@ trait TaskItem {
     fn get_attribute_from_item(&self, attribute_name: &str) -> Option<String>;
     fn get_date_from_item_attribute(&self, attribute_name: &str) -> Option<DateTime<FixedOffset>>;
     fn get_parent_uuid(&self) -> Option<Uuid>;
+    fn get_tags(&self) -> Vec<String>;
 }
 impl TaskItem for Item {
     fn get_attribute_from_item(&self, attribute_name: &str) -> Option<String> {
@@ -159,5 +172,14 @@ impl TaskItem for Item {
     fn get_parent_uuid(&self) -> Option<Uuid> {
         let related = &self.get_attribute_from_item("RELATED_TO")?;
         Uuid::parse_str(&related).ok()
+    }
+
+    fn get_tags(&self) -> Vec<String> {
+        let categories = self
+            .unwrap_task()
+            .extra_parameters()
+            .iter()
+            .filter(|x| x.name == "CATEGORIES")
+            .collect();
     }
 }

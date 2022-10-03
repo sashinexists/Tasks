@@ -25,9 +25,9 @@ async fn main() {
     let item_urls = remote_calendar.get_item_urls().await.unwrap();
     let vec_urls: Vec<Url> = item_urls.into_iter().collect();
     let items = remote_calendar.get_items_by_url(&vec_urls).await.unwrap();
-    calendar_provider.sync().await;
     let items = get_tasks_from_items(items.into_iter().flatten().collect()).await;
     println!("{:#?}", items);
+    calendar_provider.sync().await;
 }
 
 async fn get_calendar() -> CalDavProvider {
