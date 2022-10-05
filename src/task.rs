@@ -1,4 +1,5 @@
 use chrono::{DateTime, FixedOffset, Utc};
+use ical::property::Property;
 use kitchen_fridge::Item;
 use std::str::FromStr;
 use strum_macros::{Display, EnumString};
@@ -36,45 +37,26 @@ impl Task {
             CompletionStatus::from_kitchen_fridge(item.unwrap_task().completion_status());
         let start_date = item.get_date_from_item_attribute("DT_START");
         let due = item.get_date_from_item_attribute("DUE");
-        let categories = item
-            .unwrap_task()
-            .extra_parameters()
-            .iter()
-            .filter(|x| x.name == "CATEGORIES");
-        let contexts = categories
-            .clone()
-            .map(|x| x.value.as_ref().unwrap().clone())
-            .filter(|val| val.starts_with("CONTEXT "))
-            .collect();
-        let areas = categories
-            .clone()
-            .map(|x| x.value.as_ref().unwrap().clone())
-            .filter(|val| val.starts_with("AREA "))
-            .collect();
-        let projects = categories
-            .clone()
-            .map(|x| x.value.as_ref().unwrap().clone())
-            .filter(|val| val.starts_with("PROJECT "))
-            .collect();
-        let money_needed = categories
-            .clone()
-            .map(|x| x.value.as_ref().unwrap().clone())
-            .filter(|val| val == "Money Needed")
-            .collect::<Vec<String>>()
-            .len()
-            > 0;
-        let time_of_day: Option<TimeOfDay> = categories
-            .clone()
-            .map(|x| x.value.as_ref().unwrap().clone())
-            .find(|val| val.starts_with("TIMEOFDAY "))
-            .map(|val| {
-                TimeOfDay::from_str(&val).expect(&format!("{} is a bad time of day value", &val))
-            });
-        let weather: Option<Weather> = categories
-            .clone()
-            .map(|x| x.value.as_ref().unwrap().clone())
-            .find(|val| val.starts_with("WEATHER "))
-            .map(|val| Weather::from_str(&val).expect("bad time of day"));
+        let contexts = item.get_attribute_from_tag("CONTEXT ");
+        let areas = item.get_attribute_from_tag("AREA ");
+        let projects = item.get_attribute_from_tag("PROJECT ");
+        let money_needed = item.get_attribute_from_tag("MONEY").len() > 0;
+        let time_of_day: Option<TimeOfDay> = {
+            let time_of_day_tags = &item.get_attribute_from_tag("TIMEOFDAY ");
+            if time_of_day_tags.len() > 0 {
+                TimeOfDay::from_str(&time_of_day_tags[0]).ok()
+            } else {
+                None
+            }
+        };
+        let weather: Option<Weather> = {
+            let weather_tags = &item.get_attribute_from_tag("WEATHER ");
+            if weather_tags.len() > 0 {
+                Weather::from_str(&weather_tags[0]).ok()
+            } else {
+                None
+            }
+        };
         let parent_task = item.get_parent_uuid();
         Task {
             id,
@@ -154,6 +136,7 @@ trait TaskItem {
     fn get_date_from_item_attribute(&self, attribute_name: &str) -> Option<DateTime<FixedOffset>>;
     fn get_parent_uuid(&self) -> Option<Uuid>;
     fn get_tags(&self) -> Vec<String>;
+    fn get_attribute_from_tag(&self, tag: &str) -> Vec<String>;
 }
 impl TaskItem for Item {
     fn get_attribute_from_item(&self, attribute_name: &str) -> Option<String> {
@@ -175,11 +158,32 @@ impl TaskItem for Item {
     }
 
     fn get_tags(&self) -> Vec<String> {
-        let categories = self
+        let categories_string: Option<String> = match self
             .unwrap_task()
             .extra_parameters()
-            .iter()
+            .into_iter()
             .filter(|x| x.name == "CATEGORIES")
-            .collect();
+            .collect::<Vec<&Property>>()
+            .first()
+        {
+            Some(categories) => categories.value.clone(),
+            None => None,
+        };
+        match categories_string {
+            Some(categories_string) => {
+                let strs: Vec<&str> = categories_string.split(',').collect();
+                strs.into_iter().map(|s| s.to_string()).collect()
+            }
+            None => Vec::new(),
+        }
+    }
+
+    fn get_attribute_from_tag(&self, tag: &str) -> Vec<String> {
+        self.get_tags()
+            .iter()
+            .filter(|t| t.starts_with(tag))
+            .flat_map(|t| t.split("  ").last())
+            .map(|t| t.to_string())
+            .collect()
     }
 }

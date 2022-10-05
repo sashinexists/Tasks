@@ -1172,6 +1172,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "futures",
+ "ical-daladim",
  "kitchen-fridge",
  "strum",
  "strum_macros",
