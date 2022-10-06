@@ -5,6 +5,7 @@ use kitchen_fridge::{
     traits::{CalDavSource, DavCalendar},
     *,
 };
+mod app;
 mod task;
 mod utils;
 use url::Url;

@@ -40,7 +40,7 @@ impl Task {
         let contexts = item.get_attribute_from_tag("CONTEXT ");
         let areas = item.get_attribute_from_tag("AREA ");
         let projects = item.get_attribute_from_tag("PROJECT ");
-        let money_needed = item.get_attribute_from_tag("MONEY").len() > 0;
+        let money_needed = item.get_attribute_from_tag("MONEYNEEDED ").len() > 0;
         let time_of_day: Option<TimeOfDay> = {
             let time_of_day_tags = &item.get_attribute_from_tag("TIMEOFDAY ");
             if time_of_day_tags.len() > 0 {
@@ -96,7 +96,7 @@ impl CompletionStatus {
 }
 
 #[derive(Debug, PartialEq, EnumString)]
-enum TimeOfDay {
+pub enum TimeOfDay {
     #[strum(
         serialize = "TIMEOFDAY  Morning",
         serialize = "Morning",
@@ -109,7 +109,7 @@ enum TimeOfDay {
     Specific(DateTime<Utc>),
 }
 #[derive(Debug, PartialEq, EnumString)]
-enum Weather {
+pub enum Weather {
     #[strum(
         serialize = "WEATHER  Sunny",
         serialize = "WEATHER Sunny",
