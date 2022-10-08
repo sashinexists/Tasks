@@ -5,9 +5,9 @@ use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Task {
-    id: Uuid,
+    pub id: Uuid,
     creation_date: DateTime<Utc>,
     last_modified: DateTime<Utc>,
     name: String,
@@ -75,8 +75,142 @@ impl Task {
             parent_task,
         }
     }
+
+    fn modify(&self) -> Self {
+        Self {
+            last_modified: chrono::offset::Utc::now(),
+            ..self.clone()
+        }
+    }
+
+    pub fn mark_complete(&self) -> Self {
+        Self {
+            completed: CompletionStatus::Completed(Some(chrono::offset::Utc::now())),
+            ..self.clone()
+        }
+        .modify()
+    }
+    pub fn mark_incomplete(&self) -> Self {
+        Self {
+            completed: CompletionStatus::Incomplete,
+            ..self.clone()
+        }
+        .modify()
+    }
+
+    pub fn set_name(&self, name: String) -> Self {
+        Self {
+            name,
+            ..self.clone()
+        }
+        .modify()
+    }
+
+    pub fn set_start_date(&self, start_date: Option<DateTime<FixedOffset>>) -> Self {
+        Self {
+            start_date,
+            ..self.clone()
+        }
+        .modify()
+    }
+
+    pub fn set_due_date(&self, due: Option<DateTime<FixedOffset>>) -> Self {
+        Self {
+            due,
+            ..self.clone()
+        }
+        .modify()
+    }
+
+    pub fn set_money_needed(&self, money_needed: bool) -> Self {
+        Self {
+            money_needed,
+            ..self.clone()
+        }
+        .modify()
+    }
+
+    pub fn set_time_of_day(&self, time_of_day: Option<TimeOfDay>) -> Self {
+        Self {
+            time_of_day,
+            ..self.clone()
+        }
+        .modify()
+    }
+
+    pub fn set_weather(&self, weather: Option<Weather>) -> Self {
+        Self {
+            weather,
+            ..self.clone()
+        }
+        .modify()
+    }
+
+    pub fn add_context(&self, new_context: String) -> Self {
+        let mut output = self.clone();
+        output.contexts.push(new_context);
+        output.modify()
+    }
+
+    pub fn remove_context(&self, context: String) -> Self {
+        Self {
+            contexts: self
+                .clone()
+                .contexts
+                .into_iter()
+                .filter(|existing_context| &context != existing_context)
+                .collect(),
+            ..self.clone()
+        }
+        .modify()
+    }
+
+    pub fn add_area(&self, new_area: String) -> Self {
+        let mut output = self.clone();
+        output.areas.push(new_area);
+        output.modify()
+    }
+
+    pub fn remove_area(&self, area: String) -> Self {
+        Self {
+            areas: self
+                .clone()
+                .areas
+                .into_iter()
+                .filter(|existing_area| &area != existing_area)
+                .collect(),
+            ..self.clone()
+        }
+        .modify()
+    }
+    pub fn add_project(&self, new_project: String) -> Self {
+        let mut output = self.clone();
+        output.projects.push(new_project);
+        output.modify()
+    }
+
+    pub fn remove_project(&self, project: String) -> Self {
+        Self {
+            contexts: self
+                .clone()
+                .projects
+                .into_iter()
+                .filter(|existing_project| &project != existing_project)
+                .collect(),
+            ..self.clone()
+        }
+        .modify()
+    }
+
+    pub fn set_parent_task(&self, parent_task: Option<Uuid>) -> Self {
+        Self {
+            parent_task,
+            ..self.clone()
+        }
+        .modify()
+    }
 }
-#[derive(Debug, EnumString)]
+#[derive(Debug, EnumString, Clone, Eq, PartialEq)]
 enum CompletionStatus {
     Incomplete,
     Completed(Option<DateTime<Utc>>),
@@ -95,7 +229,7 @@ impl CompletionStatus {
     }
 }
 
-#[derive(Debug, PartialEq, EnumString)]
+#[derive(Debug, PartialEq, EnumString, Clone)]
 pub enum TimeOfDay {
     #[strum(
         serialize = "TIMEOFDAY  Morning",
@@ -108,7 +242,7 @@ pub enum TimeOfDay {
     Evening,
     Specific(DateTime<Utc>),
 }
-#[derive(Debug, PartialEq, EnumString)]
+#[derive(Debug, PartialEq, EnumString, Clone)]
 pub enum Weather {
     #[strum(
         serialize = "WEATHER  Sunny",
