@@ -16,3 +16,4 @@ chrono = "0.4.22"
 tokio = { version = "1.13.0", features = ["full"] }
 strum = "0.24.1"
 strum_macros = "0.24"
+rand = "0.8.5"

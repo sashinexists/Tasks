@@ -1,16 +1,41 @@
-use crate::task::{Task, TimeOfDay, Weather};
+use crate::task::{self, Task, TimeOfDay, Weather};
 use chrono::{DateTime, FixedOffset};
+use kitchen_fridge::{
+    traits::{CalDavSource, DavCalendar},
+    CalDavProvider, Item,
+};
+use url::Url;
 use uuid::Uuid;
 
-struct App {
+pub struct App {
+    provider: CalDavProvider,
+    source_url: Url,
     tasks: Vec<Task>,
     events: Log,
 }
 
 impl App {
+    pub async fn new(provider: CalDavProvider, source_url: Url) -> Self {
+        let remote_calendar = provider.remote().get_calendar(&source_url).await.unwrap();
+        let remote_calendar = &*remote_calendar.lock().unwrap();
+        let item_urls = remote_calendar.get_item_urls().await.unwrap();
+        let vec_urls: Vec<Url> = item_urls.into_iter().collect();
+        let items = remote_calendar.get_items_by_url(&vec_urls).await.unwrap();
+        let tasks = get_tasks_from_items(items.into_iter().flatten().collect()).await;
+        Self {
+            provider,
+            source_url,
+            tasks,
+            events: Log::new(),
+        }
+    }
+
     fn update(tasks: &[Task], event: Message) -> Vec<Task> {
         //this will match on the event and make a change depending on it
         match event {
+            Message::SetName(task, name) => {
+                App::perform_action(tasks, task, |t: Task| t.set_name(name.clone()))
+            }
             Message::MarkComplete(task) => {
                 App::perform_action(tasks, task, |t: Task| t.mark_complete())
             }
@@ -101,7 +126,7 @@ impl App {
             .collect()
     }
 
-    fn get_present_state(&self) -> Vec<Task> {
+    pub fn get_present_state(&self) -> Vec<Task> {
         //this will loop through all the events and update
         self.events
             .clone()
@@ -110,6 +135,10 @@ impl App {
             .fold(self.clone().tasks.clone(), |current, event| -> Vec<Task> {
                 App::update(&current, event)
             })
+    }
+
+    pub fn new_event(&mut self, event: Message) {
+        self.events.add(event);
     }
 }
 
@@ -146,7 +175,8 @@ impl Log {
 }
 
 #[derive(Clone)]
-enum Message {
+pub enum Message {
+    SetName(Task, String),
     MarkComplete(Task),
     MarkIncomplete(Task),
     SetStartDate(Task, Option<DateTime<FixedOffset>>),
@@ -163,4 +193,13 @@ enum Message {
     SetParentTask(Task, Option<Uuid>),
     AddTask(Task),
     RemoveTask(Task),
+}
+
+async fn get_tasks_from_items(items: Vec<Item>) -> Vec<task::Task> {
+    let mut tasks: Vec<task::Task> = Vec::new();
+    for item in items {
+        let task = task::Task::from_item(item);
+        tasks.push(task);
+    }
+    tasks
 }

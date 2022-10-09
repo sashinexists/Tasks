@@ -1,6 +1,7 @@
 use chrono::{DateTime, FixedOffset, Utc};
 use ical::property::Property;
 use kitchen_fridge::Item;
+use rand::*;
 use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
@@ -24,7 +25,25 @@ pub struct Task {
 }
 
 impl Task {
-    pub fn from_item(item: Item) -> Task {
+    pub fn new(name: String) -> Self {
+        Self {
+            id: uuid::Builder::from_random_bytes(rand::thread_rng().gen()).into_uuid(),
+            creation_date: chrono::offset::Utc::now(),
+            last_modified: chrono::offset::Utc::now(),
+            name,
+            completed: CompletionStatus::Incomplete,
+            start_date: None,
+            due: None,
+            contexts: Vec::new(),
+            areas: Vec::new(),
+            projects: Vec::new(),
+            money_needed: false,
+            time_of_day: None,
+            weather: None,
+            parent_task: None,
+        }
+    }
+    pub fn from_item(item: Item) -> Self {
         let id = Uuid::parse_str(item.uid())
             .expect(format!("{} is an Invalid UUID", item.uid()).as_str());
         let creation_date = item

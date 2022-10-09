@@ -13,22 +13,25 @@ use url::Url;
 #[tokio::main]
 async fn main() {
     dotenv().ok();
-    let mut calendar_provider = get_calendar().await;
+    let calendar_provider = get_calendar().await;
     let calendar_url =
         Url::parse("https://sashin.online/remote.php/dav/calendars/sashin/rust-playground/")
             .unwrap();
-    let remote_calendar = calendar_provider
-        .remote()
-        .get_calendar(&calendar_url)
-        .await
-        .unwrap();
-    let remote_calendar = &*remote_calendar.lock().unwrap();
-    let item_urls = remote_calendar.get_item_urls().await.unwrap();
-    let vec_urls: Vec<Url> = item_urls.into_iter().collect();
-    let items = remote_calendar.get_items_by_url(&vec_urls).await.unwrap();
-    let items = get_tasks_from_items(items.into_iter().flatten().collect()).await;
-    println!("{:#?}", items);
-    calendar_provider.sync().await;
+    let mut app = app::App::new(calendar_provider, calendar_url).await;
+
+    let new_task = task::Task::new("Adding a new task".to_string());
+    app.new_event(app::Message::AddTask(new_task.clone()));
+    app.new_event(app::Message::MarkComplete(new_task.clone()));
+    app.new_event(app::Message::AddContext(
+        new_task.clone(),
+        "Laptop".to_string(),
+    ));
+    app.new_event(app::Message::SetName(
+        new_task.clone(),
+        "This Task has been renamed".to_string(),
+    ));
+    println!("{:#?}", app.get_present_state());
+    // calendar_provider.sync().await;
 }
 
 async fn get_calendar() -> CalDavProvider {
@@ -44,11 +47,11 @@ async fn get_calendar() -> CalDavProvider {
     CalDavProvider::new(client, cache)
 }
 
-async fn get_tasks_from_items(items: Vec<Item>) -> Vec<task::Task> {
-    let mut tasks: Vec<task::Task> = Vec::new();
-    for item in items {
-        let task = task::Task::from_item(item);
-        tasks.push(task);
-    }
-    tasks
-}
+// async fn get_tasks_from_items(items: Vec<Item>) -> Vec<task::Task> {
+//     let mut tasks: Vec<task::Task> = Vec::new();
+//     for item in items {
+//         let task = task::Task::from_item(item);
+//         tasks.push(task);
+//     }
+//     tasks
+// }
