@@ -2,8 +2,9 @@ use chrono::{DateTime, FixedOffset, Utc};
 use ical::property::Property;
 use kitchen_fridge::Item;
 use rand::*;
-use std::str::FromStr;
-use strum_macros::{Display, EnumString};
+use std::{fmt::Display, str::FromStr};
+use strum_macros::{Display, EnumString, ToString};
+use url::Url;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -93,6 +94,72 @@ impl Task {
             weather,
             parent_task,
         }
+    }
+
+    pub fn to_item(&self, calendar_url: &Url) -> Item {
+        Item::Task(kitchen_fridge::Task::new_with_parameters(
+            self.name.clone(),
+            self.id.to_string(),
+            kitchen_fridge::utils::random_url(calendar_url),
+            self.completed.to_kitchen_fridge(),
+            kitchen_fridge::item::SyncStatus::NotSynced,
+            Some(self.creation_date),
+            self.last_modified,
+            kitchen_fridge::ical::default_prod_id(),
+            self.get_item_properties(),
+        ))
+    }
+
+    fn get_item_properties(&self) -> Vec<Property> {
+        let mut properties: Vec<Property> = Vec::new();
+        let parent_task_property_value = match self.parent_task {
+            Some(task) => Some(task.to_string()),
+            None => None,
+        };
+
+        properties.push(Property {
+            name: "RELATED-TO".to_owned(),
+            params: None,
+            value: parent_task_property_value,
+        });
+
+        let weather_string = match &self.weather {
+            Some(weather) => format!("WEATHER  {},", weather.to_string()),
+            None => "".to_string(),
+        };
+        let time_of_day_string = match &self.time_of_day {
+            Some(time_of_day) => format!("TIMEOFDAY  {},", time_of_day.to_string()),
+            None => "".to_string(),
+        };
+        let money_needed_string = match &self.money_needed {
+            true => "MONEYNEEDED  true,".to_string(),
+            false => "".to_string(),
+        };
+        let contexts_string = self.contexts.iter().fold("".to_string(), |acc, context| {
+            acc + &format!("CONTEXT  {},", context)
+        });
+        let areas_string = self.areas.iter().fold("".to_string(), |acc, area| {
+            acc + &format!("AREA  {},", area)
+        });
+        let projects_string = self.projects.iter().fold("".to_string(), |acc, project| {
+            acc + &format!("PROJECT  {},", project)
+        });
+
+        let categories_string = format!(
+            "{}{}{}{}{}{}",
+            weather_string,
+            time_of_day_string,
+            money_needed_string,
+            contexts_string,
+            areas_string,
+            projects_string
+        );
+        properties.push(Property {
+            name: "CATEGORIES".to_owned(),
+            params: None,
+            value: Some(categories_string),
+        });
+        properties
     }
 
     fn modify(&self) -> Self {
@@ -246,31 +313,39 @@ impl CompletionStatus {
             Incomplete => Self::Incomplete,
         }
     }
+
+    pub fn to_kitchen_fridge(&self) -> kitchen_fridge::task::CompletionStatus {
+        match self {
+            CompletionStatus::Incomplete => kitchen_fridge::task::CompletionStatus::Uncompleted,
+            CompletionStatus::Completed(date_completed) => {
+                kitchen_fridge::task::CompletionStatus::Completed(date_completed.clone())
+            }
+        }
+    }
 }
 
-#[derive(Debug, PartialEq, EnumString, Clone)]
+#[derive(Debug, PartialEq, EnumString, Clone, Display)]
 pub enum TimeOfDay {
-    #[strum(
-        serialize = "TIMEOFDAY  Morning",
-        serialize = "Morning",
-        serialize = "TIMEOFDAY Morning"
-    )]
+    #[strum(serialize = "TIMEOFDAY  Morning")]
     Morning,
+    #[strum(serialize = "TIMEOFDAY  Midday")]
     Midday,
+    #[strum(serialize = "TIMEOFDAY  Afternoon")]
     Afternoon,
+    #[strum(serialize = "TIMEOFDAY  Evening")]
     Evening,
+    #[strum(serialize = "TIMEOFDAY  Specific")]
     Specific(DateTime<Utc>),
 }
-#[derive(Debug, PartialEq, EnumString, Clone)]
+#[derive(Debug, PartialEq, EnumString, Clone, Display)]
 pub enum Weather {
-    #[strum(
-        serialize = "WEATHER  Sunny",
-        serialize = "WEATHER Sunny",
-        serialize = "Sunny"
-    )]
+    #[strum(to_string = "WEATHER  Sunny")]
     Sunny,
+    #[strum(serialize = "WEATHER  Cloudy")]
     Cloudy,
+    #[strum(serialize = "WEATHER  Rainy")]
     Rainy,
+    #[strum(serialize = "WEATHER  Windy")]
     Windy,
 }
 

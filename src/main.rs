@@ -18,7 +18,6 @@ async fn main() {
         Url::parse("https://sashin.online/remote.php/dav/calendars/sashin/rust-playground/")
             .unwrap();
     let mut app = app::App::new(calendar_provider, calendar_url).await;
-
     let new_task = task::Task::new("Adding a new task".to_string());
     app.new_event(app::Message::AddTask(new_task.clone()));
     app.new_event(app::Message::MarkComplete(new_task.clone()));
@@ -30,8 +29,16 @@ async fn main() {
         new_task.clone(),
         "This Task has been renamed".to_string(),
     ));
-    println!("{:#?}", app.get_present_state());
-    // calendar_provider.sync().await;
+    app.sync().await;
+    // println!(
+    //     "{:?}",
+    //     app.provider
+    //         .local()
+    //         .get_calendar_sync(&app.source_url)
+    //         .unwrap()
+    //         .lock()
+    //         .unwrap()
+    // )
 }
 
 async fn get_calendar() -> CalDavProvider {

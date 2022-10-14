@@ -1,27 +1,33 @@
 use crate::task::{self, Task, TimeOfDay, Weather};
 use chrono::{DateTime, FixedOffset};
 use kitchen_fridge::{
-    traits::{CalDavSource, DavCalendar},
+    calendar::cached_calendar::CachedCalendar,
+    traits::{CalDavSource, CompleteCalendar, DavCalendar},
     CalDavProvider, Item,
 };
 use url::Url;
 use uuid::Uuid;
 
 pub struct App {
-    provider: CalDavProvider,
-    source_url: Url,
+    pub provider: CalDavProvider,
+    pub source_url: Url,
     tasks: Vec<Task>,
     events: Log,
 }
 
 impl App {
-    pub async fn new(provider: CalDavProvider, source_url: Url) -> Self {
-        let remote_calendar = provider.remote().get_calendar(&source_url).await.unwrap();
-        let remote_calendar = &*remote_calendar.lock().unwrap();
-        let item_urls = remote_calendar.get_item_urls().await.unwrap();
-        let vec_urls: Vec<Url> = item_urls.into_iter().collect();
-        let items = remote_calendar.get_items_by_url(&vec_urls).await.unwrap();
-        let tasks = get_tasks_from_items(items.into_iter().flatten().collect()).await;
+    pub async fn new(mut provider: CalDavProvider, source_url: Url) -> Self {
+        provider.sync().await;
+        let local_calendar = provider.local().get_calendar(&source_url).await.unwrap();
+        let local_calendar = &*local_calendar.lock().unwrap();
+        let items: Vec<Item> = local_calendar
+            .get_items()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|(_, item)| item.clone())
+            .collect();
+        let tasks = get_tasks_from_items(items).await;
         Self {
             provider,
             source_url,
@@ -139,6 +145,99 @@ impl App {
 
     pub fn new_event(&mut self, event: Message) {
         self.events.add(event);
+    }
+
+    // pub async fn add_items_to_calendar(&mut self, items: Arc<Mutex<CachedCalendar>>) {
+    //     let mut local_calendar = self
+    //         .provider
+    //         .local_mut()
+    //         .get_calendar(&self.source_url)
+    //         .await;
+    //     local_calendar.get_or_insert()
+    // }
+
+    pub async fn sync(&mut self) {
+        let mut local_calendar = self.get_local_calendar().await;
+        let current_items = self.get_local_calendar_items().await;
+        let tasks = self.get_present_state();
+        let to_add: Vec<Item> = Vec::new();
+        let to_update: Vec<Item> = Vec::new();
+        let to_delete: Vec<Item> = Vec::new();
+        current_items.iter().for_each(|item| {
+            if tasks.iter().any(|task| {
+                println!(
+                    "Does {} == {}? {}",
+                    item.uid(),
+                    task.id.to_string(),
+                    item.uid() == task.id.to_string()
+                );
+                task.id.to_string() == item.uid()
+            }) {
+                println!("Supposed to update an item");
+
+                local_calendar
+                    .add_item_sync(
+                        tasks
+                            .iter()
+                            .find(|task| task.id.to_string() == item.uid())
+                            .expect("failed to get task to update")
+                            .to_item(&self.source_url),
+                    )
+                    .expect("Failed to update item");
+            } else {
+                println!("Supposed to mark an item for deletion");
+                local_calendar
+                    .mark_for_deletion_sync(item.url())
+                    .expect("Failed to mark item for deletion");
+            }
+        });
+        tasks
+            .iter()
+            .filter(|task| {
+                current_items.iter().any(|item| {
+                    println!(
+                        "Does {} != {}? {}",
+                        item.uid(),
+                        task.id.to_string(),
+                        item.uid() != task.id.to_string()
+                    );
+                    item.uid() != task.id.to_string()
+                })
+            })
+            .for_each(|task| {
+                println!("Supposed to add an item");
+                local_calendar
+                    .add_item_sync(task.to_item(&self.source_url))
+                    .expect("Failed to add item");
+            });
+
+        // println!("{:?}", local_calendar);
+        // let (sender, _) = kitchen_fridge::provider::sync_progress::feedback_channel();
+        // self.provider.sync_with_feedback(sender).await;
+        println!("{:#?}", self.get_local_calendar_items().await);
+        self.provider.sync().await;
+    }
+
+    async fn get_local_calendar(&mut self) -> CachedCalendar {
+        let local_calendar = self
+            .provider
+            .local_mut()
+            .get_calendar(&self.source_url)
+            .await
+            .unwrap();
+        let local_calendar = local_calendar.lock().unwrap();
+        local_calendar.to_owned()
+    }
+
+    async fn get_local_calendar_items(&mut self) -> Vec<Item> {
+        let local_calendar = self.get_local_calendar().await;
+        local_calendar
+            .get_items()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|(_, item)| item.clone())
+            .collect()
     }
 }
 
