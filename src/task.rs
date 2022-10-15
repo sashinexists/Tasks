@@ -1,4 +1,4 @@
-use chrono::{DateTime, FixedOffset, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
 use ical::property::Property;
 use kitchen_fridge::Item;
 use rand::*;
@@ -14,8 +14,8 @@ pub struct Task {
     last_modified: DateTime<Utc>,
     name: String,
     completed: CompletionStatus,
-    start_date: Option<DateTime<FixedOffset>>,
-    due: Option<DateTime<FixedOffset>>,
+    start_date: Option<NaiveDateTime>,
+    due: Option<NaiveDateTime>,
     contexts: Vec<String>,
     areas: Vec<String>,
     projects: Vec<String>,
@@ -55,7 +55,7 @@ impl Task {
         let name = item.name().to_string();
         let completed =
             CompletionStatus::from_kitchen_fridge(item.unwrap_task().completion_status());
-        let start_date = item.get_date_from_item_attribute("DT_START");
+        let start_date = item.get_date_from_item_attribute("DTSTART");
         let due = item.get_date_from_item_attribute("DUE");
         let contexts = item.get_attribute_from_tag("CONTEXT ");
         let areas = item.get_attribute_from_tag("AREA ");
@@ -118,21 +118,38 @@ impl Task {
         };
 
         properties.push(Property {
+            name: "DT_START".to_owned(),
+            params: None,
+            value: match self.start_date {
+                Some(date) => Some(date.to_string()),
+                None => None,
+            },
+        });
+        properties.push(Property {
+            name: "DUE".to_owned(),
+            params: None,
+            value: match self.due {
+                Some(date) => Some(date.to_string()),
+                None => None,
+            },
+        });
+
+        properties.push(Property {
             name: "RELATED-TO".to_owned(),
             params: None,
             value: parent_task_property_value,
         });
 
         let weather_string = match &self.weather {
-            Some(weather) => format!("WEATHER  {},", weather.to_string()),
+            Some(weather) => weather.to_string(),
             None => "".to_string(),
         };
         let time_of_day_string = match &self.time_of_day {
-            Some(time_of_day) => format!("TIMEOFDAY  {},", time_of_day.to_string()),
+            Some(time_of_day) => time_of_day.to_string(),
             None => "".to_string(),
         };
         let money_needed_string = match &self.money_needed {
-            true => "MONEYNEEDED  true,".to_string(),
+            true => "MONEYNEEDED  true".to_string(),
             false => "".to_string(),
         };
         let contexts_string = self.contexts.iter().fold("".to_string(), |acc, context| {
@@ -146,13 +163,13 @@ impl Task {
         });
 
         let categories_string = format!(
-            "{}{}{}{}{}{}",
+            "{},{},{}{}{}{}",
             weather_string,
             time_of_day_string,
-            money_needed_string,
             contexts_string,
             areas_string,
-            projects_string
+            projects_string,
+            money_needed_string,
         );
         properties.push(Property {
             name: "CATEGORIES".to_owned(),
@@ -192,7 +209,7 @@ impl Task {
         .modify()
     }
 
-    pub fn set_start_date(&self, start_date: Option<DateTime<FixedOffset>>) -> Self {
+    pub fn set_start_date(&self, start_date: Option<NaiveDateTime>) -> Self {
         Self {
             start_date,
             ..self.clone()
@@ -200,7 +217,7 @@ impl Task {
         .modify()
     }
 
-    pub fn set_due_date(&self, due: Option<DateTime<FixedOffset>>) -> Self {
+    pub fn set_due_date(&self, due: Option<NaiveDateTime>) -> Self {
         Self {
             due,
             ..self.clone()
@@ -361,7 +378,7 @@ enum Context {
 
 trait TaskItem {
     fn get_attribute_from_item(&self, attribute_name: &str) -> Option<String>;
-    fn get_date_from_item_attribute(&self, attribute_name: &str) -> Option<DateTime<FixedOffset>>;
+    fn get_date_from_item_attribute(&self, attribute_name: &str) -> Option<NaiveDateTime>;
     fn get_parent_uuid(&self) -> Option<Uuid>;
     fn get_tags(&self) -> Vec<String>;
     fn get_attribute_from_tag(&self, tag: &str) -> Vec<String>;
@@ -376,8 +393,20 @@ impl TaskItem for Item {
             .clone()
     }
 
-    fn get_date_from_item_attribute(&self, attribute_name: &str) -> Option<DateTime<FixedOffset>> {
-        DateTime::parse_from_rfc3339(&self.get_attribute_from_item(attribute_name)?).ok()
+    fn get_date_from_item_attribute(&self, attribute_name: &str) -> Option<NaiveDateTime> {
+        println!("{:?}", self.get_attribute_from_item(attribute_name));
+        println!(
+            "{:?}",
+            NaiveDateTime::parse_from_str(
+                &self.get_attribute_from_item(attribute_name).unwrap(),
+                "%Y%m%dT%H%M%S"
+            )
+        );
+        NaiveDateTime::parse_from_str(
+            &self.get_attribute_from_item(attribute_name)?,
+            "%Y%m%dT%H%M%S",
+        )
+        .ok()
     }
 
     fn get_parent_uuid(&self) -> Option<Uuid> {

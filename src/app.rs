@@ -1,5 +1,5 @@
 use crate::task::{self, Task, TimeOfDay, Weather};
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use kitchen_fridge::{
     calendar::cached_calendar::CachedCalendar,
     traits::{CalDavSource, CompleteCalendar, DavCalendar},
@@ -147,74 +147,57 @@ impl App {
         self.events.add(event);
     }
 
-    // pub async fn add_items_to_calendar(&mut self, items: Arc<Mutex<CachedCalendar>>) {
-    //     let mut local_calendar = self
-    //         .provider
-    //         .local_mut()
-    //         .get_calendar(&self.source_url)
-    //         .await;
-    //     local_calendar.get_or_insert()
-    // }
-
     pub async fn sync(&mut self) {
         let mut local_calendar = self.get_local_calendar().await;
         let current_items = self.get_local_calendar_items().await;
         let tasks = self.get_present_state();
-        let to_add: Vec<Item> = Vec::new();
-        let to_update: Vec<Item> = Vec::new();
-        let to_delete: Vec<Item> = Vec::new();
-        current_items.iter().for_each(|item| {
-            if tasks.iter().any(|task| {
-                println!(
-                    "Does {} == {}? {}",
-                    item.uid(),
-                    task.id.to_string(),
-                    item.uid() == task.id.to_string()
-                );
-                task.id.to_string() == item.uid()
-            }) {
-                println!("Supposed to update an item");
-
-                local_calendar
+        for item in current_items.iter() {
+            self.provider
+                .local_mut()
+                .get_calendar(&self.source_url)
+                .await
+                .expect("Failed to get calendar")
+                .lock()
+                .expect("failed to unlock calendar")
+                .mark_for_deletion_sync(item.url())
+                .expect("Failed to update item");
+            if tasks.iter().any(|task| task.id.to_string() == item.uid()) {
+                self.provider
+                    .local_mut()
+                    .get_calendar(&self.source_url)
+                    .await
+                    .expect("Failed to get calendar")
+                    .lock()
+                    .expect("failed to unlock calendar")
                     .add_item_sync(
                         tasks
                             .iter()
                             .find(|task| task.id.to_string() == item.uid())
-                            .expect("failed to get task to update")
+                            .expect("failed to get task")
                             .to_item(&self.source_url),
                     )
                     .expect("Failed to update item");
-            } else {
-                println!("Supposed to mark an item for deletion");
-                local_calendar
-                    .mark_for_deletion_sync(item.url())
-                    .expect("Failed to mark item for deletion");
             }
-        });
-        tasks
-            .iter()
-            .filter(|task| {
-                current_items.iter().any(|item| {
-                    println!(
-                        "Does {} != {}? {}",
-                        item.uid(),
-                        task.id.to_string(),
-                        item.uid() != task.id.to_string()
-                    );
-                    item.uid() != task.id.to_string()
-                })
-            })
-            .for_each(|task| {
-                println!("Supposed to add an item");
-                local_calendar
-                    .add_item_sync(task.to_item(&self.source_url))
-                    .expect("Failed to add item");
-            });
+        }
 
-        // println!("{:?}", local_calendar);
-        // let (sender, _) = kitchen_fridge::provider::sync_progress::feedback_channel();
-        // self.provider.sync_with_feedback(sender).await;
-        println!("{:#?}", self.get_local_calendar_items().await);
+        for task in tasks.iter() {
+            if !current_items
+                .iter()
+                .any(|item| task.id.to_string() == item.uid())
+            {
+                println!("Adding task {}", &task.id.to_string());
+                self.provider
+                    .local_mut()
+                    .get_calendar(&self.source_url)
+                    .await
+                    .expect("Failed to get calendar")
+                    .lock()
+                    .expect("failed to unlock calendar")
+                    .add_item_sync(task.to_item(&self.source_url))
+                    .expect("Failed to update item");
+            }
+        }
+
         self.provider.sync().await;
     }
 
@@ -278,8 +261,8 @@ pub enum Message {
     SetName(Task, String),
     MarkComplete(Task),
     MarkIncomplete(Task),
-    SetStartDate(Task, Option<DateTime<FixedOffset>>),
-    SetDueDate(Task, Option<DateTime<FixedOffset>>),
+    SetStartDate(Task, Option<NaiveDateTime>),
+    SetDueDate(Task, Option<NaiveDateTime>),
     AddContext(Task, String),
     RemoveContext(Task, String),
     AddProject(Task, String),
