@@ -122,12 +122,13 @@ impl Task {
 
         if let Some(date) = self.start_date {
             properties.push(Property {
-                name: "DT_START".to_owned(),
+                name: "DTSTART".to_owned(),
+                //later you will not want the timezone to be specifically sydney australia
                 params: Some(vec![(
                     "TZID".to_owned(),
                     vec!["Australia/Sydney".to_owned()],
                 )]),
-                value: Some(date.to_string()),
+                value: Some(date.format("%Y%m%dT%H%M%S").to_string()),
             })
         }
         if let Some(date) = self.due {
@@ -137,7 +138,7 @@ impl Task {
                     "TZID".to_owned(),
                     vec!["Australia/Sydney".to_owned()],
                 )]),
-                value: Some(date.to_string()),
+                value: Some(date.format("%Y%m%dT%H%M%S").to_string()),
             })
         }
 
@@ -172,6 +173,7 @@ impl Task {
             projects_string,
             money_needed_string,
         )
+        .trim()
         .trim_end_matches(",")
         .to_string();
         properties.push(Property {
