@@ -112,48 +112,49 @@ impl Task {
 
     fn get_item_properties(&self) -> Vec<Property> {
         let mut properties: Vec<Property> = Vec::new();
-        let parent_task_property_value = match self.parent_task {
-            Some(task) => Some(task.to_string()),
-            None => None,
-        };
+        if let Some(parent_id) = self.parent_task {
+            properties.push(Property {
+                name: "RELATED-TO".to_owned(),
+                params: None,
+                value: Some(parent_id.to_string()),
+            })
+        }
 
-        properties.push(Property {
-            name: "DT_START".to_owned(),
-            params: None,
-            value: match self.start_date {
-                Some(date) => Some(date.to_string()),
-                None => None,
-            },
-        });
-        properties.push(Property {
-            name: "DUE".to_owned(),
-            params: None,
-            value: match self.due {
-                Some(date) => Some(date.to_string()),
-                None => None,
-            },
-        });
-
-        properties.push(Property {
-            name: "RELATED-TO".to_owned(),
-            params: None,
-            value: parent_task_property_value,
-        });
+        if let Some(date) = self.start_date {
+            properties.push(Property {
+                name: "DT_START".to_owned(),
+                params: Some(vec![(
+                    "TZID".to_owned(),
+                    vec!["Australia/Sydney".to_owned()],
+                )]),
+                value: Some(date.to_string()),
+            })
+        }
+        if let Some(date) = self.due {
+            properties.push(Property {
+                name: "DUE".to_owned(),
+                params: Some(vec![(
+                    "TZID".to_owned(),
+                    vec!["Australia/Sydney".to_owned()],
+                )]),
+                value: Some(date.to_string()),
+            })
+        }
 
         let weather_string = match &self.weather {
-            Some(weather) => weather.to_string(),
+            Some(weather) => weather.to_string() + ",",
             None => "".to_string(),
         };
         let time_of_day_string = match &self.time_of_day {
-            Some(time_of_day) => time_of_day.to_string(),
+            Some(time_of_day) => time_of_day.to_string() + ",",
             None => "".to_string(),
         };
         let money_needed_string = match &self.money_needed {
-            true => "MONEYNEEDED  true".to_string(),
+            true => "MONEYNEEDED  true,".to_string(),
             false => "".to_string(),
         };
         let contexts_string = self.contexts.iter().fold("".to_string(), |acc, context| {
-            acc + &format!("CONTEXT  {},", context)
+            acc + &format!("CONTEXT  {}, ", context)
         });
         let areas_string = self.areas.iter().fold("".to_string(), |acc, area| {
             acc + &format!("AREA  {},", area)
@@ -163,14 +164,16 @@ impl Task {
         });
 
         let categories_string = format!(
-            "{},{},{}{}{}{}",
+            "{}{}{}{}{}{}",
             weather_string,
             time_of_day_string,
             contexts_string,
             areas_string,
             projects_string,
             money_needed_string,
-        );
+        )
+        .trim_end_matches(",")
+        .to_string();
         properties.push(Property {
             name: "CATEGORIES".to_owned(),
             params: None,
@@ -394,14 +397,6 @@ impl TaskItem for Item {
     }
 
     fn get_date_from_item_attribute(&self, attribute_name: &str) -> Option<NaiveDateTime> {
-        println!("{:?}", self.get_attribute_from_item(attribute_name));
-        println!(
-            "{:?}",
-            NaiveDateTime::parse_from_str(
-                &self.get_attribute_from_item(attribute_name).unwrap(),
-                "%Y%m%dT%H%M%S"
-            )
-        );
         NaiveDateTime::parse_from_str(
             &self.get_attribute_from_item(attribute_name)?,
             "%Y%m%dT%H%M%S",

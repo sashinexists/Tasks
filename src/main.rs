@@ -1,14 +1,16 @@
-use std::path::Path;
-
+use chrono::NaiveDateTime;
 use dotenvy::dotenv;
 use kitchen_fridge::{
     traits::{CalDavSource, DavCalendar},
     *,
 };
+use std::path::Path;
 mod app;
 mod task;
 mod utils;
 use url::Url;
+
+use crate::task::Weather;
 
 #[tokio::main]
 async fn main() {
@@ -18,18 +20,33 @@ async fn main() {
         Url::parse("https://sashin.online/remote.php/dav/calendars/sashin/rust-playground/")
             .unwrap();
     let mut app = app::App::new(calendar_provider, calendar_url).await;
-    // let new_task = task::Task::new("Adding a new task".to_string());
-    // app.new_event(app::Message::AddTask(new_task.clone()));
-    // app.new_event(app::Message::MarkComplete(new_task.clone()));
-    // app.new_event(app::Message::AddContext(
-    //     new_task.clone(),
-    //     "Laptop".to_string(),
-    // ));
-    // app.new_event(app::Message::SetName(
-    //     new_task.clone(),
-    //     "This Task has been renamed".to_string(),
-    // ));
-    // println!("{:#?}", app.get_present_state());
+    let new_task = task::Task::new("Helllo world".to_string());
+    app.new_event(app::Message::AddTask(new_task.clone()));
+    app.new_event(app::Message::AddContext(
+        new_task.id,
+        "Wumpa islands".to_string(),
+    ));
+    app.new_event(app::Message::AddContext(
+        new_task.id,
+        "Dragon Kingdom".to_string(),
+    ));
+    app.new_event(app::Message::AddContext(new_task.id, "Avalar".to_string()));
+    app.new_event(app::Message::AddContext(
+        new_task.id,
+        "Forgotten Realms".to_string(),
+    ));
+    app.new_event(app::Message::AddContext(
+        new_task.id,
+        "Warp Room".to_string(),
+    ));
+    app.new_event(app::Message::RemoveContext(
+        new_task.id,
+        "Forgotten Realms".to_string(),
+    ));
+    let start_date = NaiveDateTime::parse_from_str("20221101T140000", "%Y%m%dT%H%M%S").ok();
+    app.new_event(app::Message::SetStartDate(new_task.id, start_date));
+    let due_date = NaiveDateTime::parse_from_str("20221112T180000", "%Y%m%dT%H%M%S").ok();
+    app.new_event(app::Message::SetDueDate(new_task.id, due_date));
     app.sync().await;
     println!("\n{:#?}", app.get_present_state());
 }
@@ -46,12 +63,3 @@ async fn get_calendar() -> CalDavProvider {
     let cache = Cache::new(Path::new("tasks_data"));
     CalDavProvider::new(client, cache)
 }
-
-// async fn get_tasks_from_items(items: Vec<Item>) -> Vec<task::Task> {
-//     let mut tasks: Vec<task::Task> = Vec::new();
-//     for item in items {
-//         let task = task::Task::from_item(item);
-//         tasks.push(task);
-//     }
-//     tasks
-// }

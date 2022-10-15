@@ -39,64 +39,68 @@ impl App {
     fn update(tasks: &[Task], event: Message) -> Vec<Task> {
         //this will match on the event and make a change depending on it
         match event {
-            Message::SetName(task, name) => {
-                App::perform_action(tasks, task, |t: Task| t.set_name(name.clone()))
+            Message::SetName(task_id, name) => {
+                App::perform_action(tasks, task_id, |t: Task| t.set_name(name.clone()))
             }
-            Message::MarkComplete(task) => {
-                App::perform_action(tasks, task, |t: Task| t.mark_complete())
+            Message::MarkComplete(task_id) => {
+                App::perform_action(tasks, task_id, |t: Task| t.mark_complete())
             }
-            Message::MarkIncomplete(task) => {
-                App::perform_action(tasks, task, |t: Task| t.mark_incomplete())
+            Message::MarkIncomplete(task_id) => {
+                App::perform_action(tasks, task_id, |t: Task| t.mark_incomplete())
             }
-            Message::SetStartDate(task, start_date) => {
-                App::perform_action(tasks, task, |t: Task| t.set_start_date(start_date))
+            Message::SetStartDate(task_id, start_date) => {
+                App::perform_action(tasks, task_id, |t: Task| t.set_start_date(start_date))
             }
-            Message::SetDueDate(task, due_date) => {
-                App::perform_action(tasks, task, |t: Task| t.set_due_date(due_date))
+            Message::SetDueDate(task_id, due_date) => {
+                App::perform_action(tasks, task_id, |t: Task| t.set_due_date(due_date))
             }
-            Message::AddContext(task, context) => {
-                App::perform_action(tasks, task, |t: Task| -> Task {
+            Message::AddContext(task_id, context) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
                     t.add_context(context.clone())
                 })
             }
-            Message::RemoveContext(task, context) => {
-                App::perform_action(tasks, task, |t: Task| -> Task {
+            Message::RemoveContext(task_id, context) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
                     t.remove_context(context.clone())
                 })
             }
-            Message::AddProject(task, project) => {
-                App::perform_action(tasks, task, |t: Task| -> Task {
+            Message::AddProject(task_id, project) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
                     t.add_project(project.clone())
                 })
             }
-            Message::RemoveProject(task, project) => {
-                App::perform_action(tasks, task, |t: Task| -> Task {
+            Message::RemoveProject(task_id, project) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
                     t.remove_project(project.clone())
                 })
             }
-            Message::AddArea(task, area) => {
-                App::perform_action(tasks, task, |t: Task| -> Task { t.add_area(area.clone()) })
+            Message::AddArea(task_id, area) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
+                    t.add_area(area.clone())
+                })
             }
-            Message::RemoveArea(task, area) => {
-                App::perform_action(tasks, task, |t: Task| -> Task { t.add_area(area.clone()) })
+            Message::RemoveArea(task_id, area) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
+                    t.remove_area(area.clone())
+                })
             }
-            Message::SetMoneyNeeded(task, money_needed) => {
-                App::perform_action(tasks, task, |t: Task| -> Task {
+            Message::SetMoneyNeeded(task_id, money_needed) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
                     t.set_money_needed(money_needed)
                 })
             }
-            Message::SetWeather(task, weather) => {
-                App::perform_action(tasks, task, |t: Task| -> Task {
+            Message::SetWeather(task_id, weather) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
                     t.set_weather(weather.clone())
                 })
             }
-            Message::SetTimeOfDay(task, time_of_day) => {
-                App::perform_action(tasks, task, |t: Task| -> Task {
+            Message::SetTimeOfDay(task_id, time_of_day) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
                     t.set_time_of_day(time_of_day.clone())
                 })
             }
-            Message::SetParentTask(task, parent_task_id) => {
-                App::perform_action(tasks, task, |t: Task| -> Task {
+            Message::SetParentTask(task_id, parent_task_id) => {
+                App::perform_action(tasks, task_id, |t: Task| -> Task {
                     t.set_parent_task(parent_task_id)
                 })
             }
@@ -105,25 +109,25 @@ impl App {
                 tasks.push(task);
                 tasks
             }
-            Message::RemoveTask(task) => {
+            Message::RemoveTask(task_to_remove_id) => {
                 let tasks = Vec::from(tasks);
                 tasks
                     .clone()
                     .into_iter()
-                    .filter(|task_to_remove| task != task_to_remove.clone())
+                    .filter(|task| task_to_remove_id != task.id)
                     .collect()
             }
         }
     }
 
-    pub fn perform_action<F>(tasks: &[Task], task_to_change: Task, mut action: F) -> Vec<Task>
+    pub fn perform_action<F>(tasks: &[Task], task_to_change_id: Uuid, mut action: F) -> Vec<Task>
     where
         F: FnMut(Task) -> Task,
     {
         tasks
             .into_iter()
             .map(|task| {
-                if task.id == task_to_change.id {
+                if task.id == task_to_change_id {
                     action(task.clone())
                 } else {
                     task.clone()
@@ -148,20 +152,11 @@ impl App {
     }
 
     pub async fn sync(&mut self) {
-        let mut local_calendar = self.get_local_calendar().await;
         let current_items = self.get_local_calendar_items().await;
         let tasks = self.get_present_state();
         for item in current_items.iter() {
-            self.provider
-                .local_mut()
-                .get_calendar(&self.source_url)
-                .await
-                .expect("Failed to get calendar")
-                .lock()
-                .expect("failed to unlock calendar")
-                .mark_for_deletion_sync(item.url())
-                .expect("Failed to update item");
             if tasks.iter().any(|task| task.id.to_string() == item.uid()) {
+                println!("Updating Task {}", item.uid());
                 self.provider
                     .local_mut()
                     .get_calendar(&self.source_url)
@@ -176,6 +171,16 @@ impl App {
                             .expect("failed to get task")
                             .to_item(&self.source_url),
                     )
+                    .expect("Failed to update item");
+            } else {
+                self.provider
+                    .local_mut()
+                    .get_calendar(&self.source_url)
+                    .await
+                    .expect("Failed to get calendar")
+                    .lock()
+                    .expect("failed to unlock calendar")
+                    .mark_for_deletion_sync(item.url())
                     .expect("Failed to update item");
             }
         }
@@ -197,7 +202,6 @@ impl App {
                     .expect("Failed to update item");
             }
         }
-
         self.provider.sync().await;
     }
 
@@ -258,23 +262,23 @@ impl Log {
 
 #[derive(Clone)]
 pub enum Message {
-    SetName(Task, String),
-    MarkComplete(Task),
-    MarkIncomplete(Task),
-    SetStartDate(Task, Option<NaiveDateTime>),
-    SetDueDate(Task, Option<NaiveDateTime>),
-    AddContext(Task, String),
-    RemoveContext(Task, String),
-    AddProject(Task, String),
-    RemoveProject(Task, String),
-    AddArea(Task, String),
-    RemoveArea(Task, String),
-    SetMoneyNeeded(Task, bool),
-    SetWeather(Task, Option<Weather>),
-    SetTimeOfDay(Task, Option<TimeOfDay>),
-    SetParentTask(Task, Option<Uuid>),
+    SetName(Uuid, String),
+    MarkComplete(Uuid),
+    MarkIncomplete(Uuid),
+    SetStartDate(Uuid, Option<NaiveDateTime>),
+    SetDueDate(Uuid, Option<NaiveDateTime>),
+    AddContext(Uuid, String),
+    RemoveContext(Uuid, String),
+    AddProject(Uuid, String),
+    RemoveProject(Uuid, String),
+    AddArea(Uuid, String),
+    RemoveArea(Uuid, String),
+    SetMoneyNeeded(Uuid, bool),
+    SetWeather(Uuid, Option<Weather>),
+    SetTimeOfDay(Uuid, Option<TimeOfDay>),
+    SetParentTask(Uuid, Option<Uuid>),
     AddTask(Task),
-    RemoveTask(Task),
+    RemoveTask(Uuid),
 }
 
 async fn get_tasks_from_items(items: Vec<Item>) -> Vec<task::Task> {
